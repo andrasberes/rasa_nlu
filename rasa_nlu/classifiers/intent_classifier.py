@@ -20,10 +20,10 @@ class PytorchIntentClassifier(nn.Module,Component):
     def __init__(self, training_data=None):
         super(PytorchIntentClassifier, self).__init__()
         
-        self.label_to_ix = {"greet": 0, "affirm": 1, "restaurant_search": 2, "goodbye": 3}
+        self.indexed_labels = {"greet": 0, "affirm": 1, "restaurant_search": 2, "goodbye": 3}
     
     def feature2ix(self, text):   
-        #Indexed_words maps each word in the vocab to a unique integer
+        #Indexed_words maps each feature to a unique integer
         indexed_f = {}
         for i in text:
             for f in i:
@@ -40,33 +40,35 @@ class PytorchIntentClassifier(nn.Module,Component):
             vec[indexed_fe[sub_fea]] += 1
         return vec.view(1, -1)
     
-    def make_target(self, label, label_to_ix):
-        return torch.LongTensor([label_to_ix[label]])
+    def make_target(self, label, indexed_labels):
+        return torch.LongTensor([indexed_labels[label]])
 
     def train(self, training_data, config=None, **kwargs):
         
         labels = [e.get("intent") for e in training_data.intent_examples]
+
         text_features = np.stack([example.get("text_features") for example in training_data.intent_examples])
-        print(text_features.shape)
-        print(text_features[0])
         text_features_list = [example.get("text_features") for example in training_data.intent_examples]
-        self.linear = nn.Linear(len(text_features), len(set(labels)))
+
         indexed_features = self.feature2ix(text_features)
         indexed_features_list = self.feature2ix(text_features_list)
-        real_training_data = [(text_features_list[i],labels[i]) for i in range(len(labels))]
+
+        self.linear = nn.Linear(len(indexed_features), len(set(labels)))
         self.loss_function = nn.NLLLoss()
         self.optimizer = optim.SGD(self.parameters(), lr=0.1)
         
+        real_training_data = [(text_features_list[i],labels[i]) for i in range(len(labels))]
+
         if len(set(labels)) < 2:
             logger.warn("Can not train an intent classifier. Need at least 2 different classes. " +
                         "Skipping training of intent classifier.")
         else:
             for epoch in range(40):
+                print("Training neural network...epoch {}".format(epoch))
                 for instance, label in real_training_data:
                     self.zero_grad()	#clear gradient each turn before calculating  
                     bow_vec = autograd.Variable(self.make_vector(instance, indexed_features))
-                    print(bow_vec)
-                    target = autograd.Variable(self.make_target(label, self.label_to_ix))
+                    target = autograd.Variable(self.make_target(label, self.indexed_labels))
                     
                     # Step 3. Run our forward pass.
                     log_probs = self.forward(bow_vec)
@@ -82,11 +84,10 @@ class PytorchIntentClassifier(nn.Module,Component):
         """Persist this model into the passed directory. Returns the metadata necessary to load the model again."""
 
         import cloudpickle
-
+        import os, io
         classifier_file = os.path.join(model_dir, "intent_classifier.pkl")
         with io.open(classifier_file, 'wb') as f:
             cloudpickle.dump(self, f)
-
         return {
-            "intent_classifier_sklearn": "intent_classifier.pkl"
+            "intent_classifier_pytorch": "intent_classifier.pkl"
         }
