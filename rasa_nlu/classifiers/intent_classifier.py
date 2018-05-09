@@ -38,12 +38,6 @@ class PytorchIntentClassifier(nn.Module,Component):
 
     def forward(self, fea):
         return F.log_softmax(self.linear(fea), dim=1)
-
-    def make_vector(self, feature, indexed_fe):
-        vec = torch.zeros(len(indexed_fe))
-        for sub_fea in feature:
-            vec[indexed_fe[sub_fea]] += 1
-        return vec.view(1, -1)      #reshape 
     
     def make_target(self, label, indexed_labels):
         return torch.LongTensor([indexed_labels[label]])
@@ -58,7 +52,7 @@ class PytorchIntentClassifier(nn.Module,Component):
         self.indexed_features = self.feature2ix(text_features)
         indexed_features_list = self.feature2ix(text_features_list)
 
-        self.linear = nn.Linear(len(self.indexed_features), len(set(labels)))
+        self.linear = nn.Linear(len(text_features[0]), len(set(labels)))
         self.loss_function = nn.NLLLoss()
         self.optimizer = optim.SGD(self.parameters(), lr=0.1)
         
@@ -71,7 +65,7 @@ class PytorchIntentClassifier(nn.Module,Component):
             for epoch in range(40):
                 for instance, label in real_training_data:
                     self.zero_grad()	#clear gradient each turn before calculating  
-                    bow_vec = autograd.Variable(self.make_vector(instance, self.indexed_features))
+                    bow_vec = autograd.Variable(torch.Tensor(instance).view(1,-1))
                     target = autograd.Variable(self.make_target(label, self.indexed_labels))
 
                     # Step 3. Run our forward pass.
@@ -120,7 +114,7 @@ class PytorchIntentClassifier(nn.Module,Component):
         """Returns the most likely intent and its probability for the input text."""
 
         X = (message.get("text_features"))
-        pytorch_vec = autograd.Variable(self.make_vector(X, self.indexed_features)) #itt az X csak tipp
+        pytorch_vec = autograd.Variable(torch.Tensor(X).view(1,-1)) #itt az X csak tipp
         log_probs = self.forward(pytorch_vec)
         print("ITT A KIIRAS: log_probs: {}".format(log_probs))
         '''
